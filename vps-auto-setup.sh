@@ -42,11 +42,24 @@ generate_session_secret() {
     openssl rand -hex 64
 }
 
-# Check if running as root
+# Check if running as root and handle appropriately
 if [[ $EUID -eq 0 ]]; then
-   print_error "This script should not be run as root for security reasons"
-   print_status "Please run as a regular user with sudo privileges"
-   exit 1
+   print_warning "Running as root user. Creating dedicated application user for security..."
+   
+   # Create application user if it doesn't exist
+   if ! id -u appuser >/dev/null 2>&1; then
+       useradd -m -s /bin/bash appuser
+       usermod -aG sudo appuser
+       print_status "Created application user 'appuser'"
+   fi
+   
+   SUDO_CMD=""
+   APP_USER="appuser"
+   HOME_DIR="/home/appuser"
+else
+   SUDO_CMD="sudo"
+   APP_USER="$USER"
+   HOME_DIR="$HOME"
 fi
 
 print_status "Starting Crypto Airdrop Platform VPS Setup..."
@@ -76,29 +89,29 @@ echo
 
 # Update system
 print_status "Updating system packages..."
-sudo apt update && sudo apt upgrade -y
+${SUDO_CMD} apt update && ${SUDO_CMD} apt upgrade -y
 
 # Install required packages
 print_status "Installing required packages..."
-sudo apt install -y postgresql postgresql-contrib nginx certbot python3-certbot-nginx curl git ufw
+${SUDO_CMD} apt install -y postgresql postgresql-contrib nginx certbot python3-certbot-nginx curl git ufw
 
 # Install Node.js 20
 print_status "Installing Node.js 20..."
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+curl -fsSL https://deb.nodesource.com/setup_20.x | ${SUDO_CMD} -E bash -
+${SUDO_CMD} apt install -y nodejs
 
 # Install PM2
 print_status "Installing PM2..."
-sudo npm install -g pm2
+${SUDO_CMD} npm install -g pm2
 
 # Configure PostgreSQL
 print_status "Configuring PostgreSQL..."
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+${SUDO_CMD} systemctl start postgresql
+${SUDO_CMD} systemctl enable postgresql
 
 # Create database and user
 print_status "Creating database and user..."
-sudo -u postgres psql <<EOF
+${SUDO_CMD} -u postgres psql <<EOF
 CREATE DATABASE crypto_airdrop_db;
 CREATE USER airdrop_user WITH PASSWORD '$DB_PASSWORD';
 GRANT ALL PRIVILEGES ON DATABASE crypto_airdrop_db TO airdrop_user;
